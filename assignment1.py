@@ -62,3 +62,5 @@ else:
 
     else:
       comm.send(integrand(x) * delta, dest=0)
+
+writing any old thing to see if it appears in main 
