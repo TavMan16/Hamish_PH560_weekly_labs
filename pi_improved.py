@@ -20,17 +20,19 @@ def main() -> None:
     n_samples = 10_000_000
     delta = 1.0 / n_samples
 
-    local_sum = 0.0
+    start_time = MPI.Wtime()
 
+    local_sum = 0.0
     for i in range(rank, n_samples, nproc):
         x = (i + 0.5) * delta
         local_sum += integrand(x) * delta
 
     total = comm.reduce(local_sum, op=MPI.SUM, root=0)
 
+    elapsed = MPI.Wtime() - start_time
+
     if rank == 0:
         print(f"Estimated pi = {total:.12f}")
-
-
+        print(f"Elapsed time (loop + summation) = {elapsed:.6f} s")
 if __name__ == "__main__":
     main()
