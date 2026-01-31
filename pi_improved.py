@@ -1,3 +1,9 @@
+"""
+Parallel midpoint-rule integration to estimate pi using MPI.
+
+Tested with Python 3.12.3 and mpi4py.
+"""
+
 from mpi4py import MPI
 
 
