@@ -80,7 +80,7 @@ def main() -> None:
     # (to avoid duplicated output from every process)
     if rank == 0:
         print(f"Estimated pi = {total:.12f}")
-        print(f"Elapsed time (loop + reduce) = {elapsed:.6f} s")
+        print(f"TIME {elapsed:.6f}")
 
 
 # Standard Python pattern:
