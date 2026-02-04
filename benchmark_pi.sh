@@ -1,54 +1,101 @@
 #!/bin/bash
-#SBATCH --export=ALL
-#SBATCH --partition=teaching
-#SBATCH --account=teaching
+# Use the bash shell to run this script
+
+
+# Request 1 compute node
 #SBATCH --nodes=1
+
+# Request up to 16 MPI tasks (processes)
 #SBATCH --ntasks=16
+
+# Use the whole node exclusively
 #SBATCH --exclusive
+
+# Set maximum runtime to 20 minutes
 #SBATCH --time=00:20:00
-#SBATCH --job-name=pi_bench
+
+# Name of the job in the scheduler
+#SBATCH --job-name=pi_benchmark
+
+# File for standard output (%j is replaced with job ID)
 #SBATCH --output=slurm-%j.out
 
+# Choose the teaching partition (queue)
+#SBATCH --partition=teaching
 
-# Clear any modules currently loaded in ARCHIE's environment
+# Account to charge compute time to
+#SBATCH --account=teaching
+
+
+# Remove all currently loaded modules
 module purge
 
-# Load the Python and MPI modules needed to run mpi4py jobs
-module load python
+# Load the MPI environment (needed for mpi4py)
 module load mpi
 
-# Set variable names and definitions used in the benchmark loop:
-#   SCRIPT  = the Python program to run
-#   OUT     = the output CSV file to write timings into
-#   REPEATS = number of times to repeat each MPI run (for averaging later)
-#   PCS     = list of MPI process counts (np values) to test
-SCRIPT=pi_improved.py
-OUT=timings.csv
+
+# CSV file to store all timing results
+OUT="timings_both.csv"
+
+# Number of repeated runs per configuration
 REPEATS=5
+
+# MPI process counts to test
 PCS="1 2 4 8 16"
 
-# Create/overwrite the CSV file and write a header row
-# This makes the output easy to load later (e.g. in Python/pandas)
-echo "np,run,time_seconds" > "$OUT"
 
-# Loop over each requested number of MPI processes
-for np in $PCS; do
+# Python implementations to benchmark
+SCRIPTS="assignment1.py pi_improved.py"
 
-  # For each process count, run the program REPEATS times
-  for run in $(seq 1 $REPEATS); do
 
-    # Run the program using srun with np MPI tasks.
-    # The Python script is expected to print a line like:  TIME 0.123456
-    # awk searches for a line starting with "TIME " and prints the 2nd column,
-    # which is the numeric timing value.
-    t=$(srun -n "$np" python3 "$SCRIPT" | awk '/^TIME /{print $2}')
+# Write the CSV header (overwrite if file exists)
+echo "implementation,np,run,pi_estimate,time_seconds" > "$OUT"
 
-    # Append one row to the CSV file: process_count, repeat_index, time_seconds
-    echo "$np,$run,$t" >> "$OUT"
 
+# Loop over each Python script
+for script in $SCRIPTS; do
+
+  # Loop over each MPI process count
+  for np in $PCS; do
+
+    # Repeat each configuration several times
+    for run in $(seq 1 $REPEATS); do
+
+
+      # Run the Python script with np MPI processes and capture output
+      output=$(srun --mpi=pmi2 -n "$np" python "$script")
+
+
+      # Extract the pi estimate from the line beginning with "PI "
+      pi_value=$(echo "$output" | awk '/^PI /{print $2}')
+
+      # Extract the timing from the line beginning with "TIME "
+      time_value=$(echo "$output" | awk '/^TIME /{print $2}')
+
+
+      # Check that both values were successfully extracted
+      if [[ -z "$pi_value" || -z "$time_value" ]]; then
+
+        # Print an error message
+        echo "Error running $script with np=$np run=$run"
+
+        # Print full output for debugging
+        echo "$output"
+
+        # Stop execution if something failed
+        exit 1
+
+      fi
+
+
+      # Append the results as a new row in the CSV file
+      echo "$script,$np,$run,$pi_value,$time_value" >> "$OUT"
+
+
+      # Print progress to the terminal
+      echo "impl=$script np=$np run=$run time=$time_value"
+
+    done
   done
 done
 
-# End of script:
-# After the job finishes, timings.csv will contain all recorded timings,
-# ready to be averaged and plotted.
