@@ -85,7 +85,8 @@ def main() -> None:
         # Optional: print the estimated value of pi
         # print(f"Estimated pi = {total:.12f}")
 
-        # Print timing in a simple format for CSV parsing
+        # Print timing and pi in a simple format for CSV parsing
+        print(f"PI {total:.12f}")
         print(f"TIME {elapsed_max:.6f}")
 
 
@@ -93,4 +94,3 @@ def main() -> None:
 # Ensures main() only runs when this file is executed directly
 if __name__ == "__main__":
     main()
-
