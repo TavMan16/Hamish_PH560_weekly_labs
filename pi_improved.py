@@ -86,7 +86,7 @@ def main() -> None:
         # print(f"Estimated pi = {total:.12f}")
 
         # Print timing and pi in a simple format for CSV parsing
-        print(f"PI {total:.12f}")
+        print(f"PI {total:.15f}")
         print(f"TIME {elapsed_max:.6f}")
 
 
