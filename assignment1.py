@@ -9,8 +9,14 @@ nproc = comm.Get_size()
 nworkers = nproc - 1
 
 # samples
-N = 100000000
+N = 100000
 delta = 1.0 / N
+
+# Synchronise all processes so timing starts fairly
+comm.Barrier()
+
+# Start timing (MPI's wall-clock timer)
+start_time = MPI.Wtime()
 
 # integral
 I = 0.0
@@ -45,7 +51,13 @@ if comm.Get_rank() == 0:
   for i in range(1, nproc):
     comm.send(-1.0, dest=i)
 
-  print("Integral %.10f" % I)
+  # Stop timing
+  elapsed = MPI.Wtime() - start_time
+
+  # Print in the format the jobscript expects
+  print(f"PI {I:.15f}")
+  print(f"TIME {elapsed:.6f}")
+
 
 else:
 
@@ -62,5 +74,3 @@ else:
 
     else:
       comm.send(integrand(x) * delta, dest=0)
-
-writing any old thing to see if it appears in main 
