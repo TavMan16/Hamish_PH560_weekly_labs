@@ -2,7 +2,7 @@
 Simple test script for Vector3D class.
 """
 
-from vector3d import Vector3D
+from Vector3D import Vector3D
 
 
 def main():
