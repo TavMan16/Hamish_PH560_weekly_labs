@@ -25,7 +25,7 @@ class Vector3D:
 
     def __str__(self):
         """Return formatted string representation."""
-        return f"Vector3D: ({self.x:.2f}, {self.y:.2f}, {self.z:.2f})"
+        return f"({self.x:.2f}, {self.y:.2f}, {self.z:.2f})"
 
     def magnitude(self):
         """Return the Euclidean norm |v|."""
