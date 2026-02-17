@@ -1,46 +1,31 @@
 """
 task3_hansen.py
 
-Written for Python 3.12.3
+Numerically verify the Hansen vector identities from Assignment 2.
 
-Pylint score: 9.87
+We test, at selected points, that:
+1) div M = 0
+2) div N = 0
+3) curl N = M / |k|
+4) curl M = N / |k|
 
-Task 3 (Assignment 2): numerical verification of the “Hansen vector” identities.
+Central finite differences are used for derivatives.
 
-Fields are defined as given in the assignment:
-    k = pi*(0,0,1)
-    M(x,y,z) = (1,0,0) * exp(i*pi*z)
-    N(x,y,z) = (0,1,0) * exp(i*pi*z)
+We also test the analytic curl relations that match these specific definitions of
+M and N (obtained by differentiating the complex exponential phase factor):
+    curl(N) = -i|k| M
+    curl(M) = +i|k| N
 
-Using central finite differences, we compute:
-    - div(M), div(N)
-    - curl(M), curl(N)
-
-We then compare the numerical results against TWO sets of relations:
-
-(A) The relations stated in the assignment:
-        div(M) = 0
-        div(N) = 0
-        curl(N) = M/|k|
-        curl(M) = N/|k|
-    Expected outcome for these specific M,N:
-        - divergence checks should be (near) zero
-        - curl checks typically do NOT go to zero (a scaling/phase mismatch appears)
-
-(B) The analytic curl relations implied directly by differentiating exp(i*pi*z):
-        curl(N) = -i|k| * M
-        curl(M) =  +i|k| * N
-    Expected outcome:
-        - the residuals for (B) should be (near) zero, confirming the numerical curl is correct.
-
-The script prints residuals and PASS/FAIL messages at a small set of test points.
+The script prints the residuals for each check and PASS/FAIL messages using a
+small tolerance to account for floating-point roundoff.
 """
 
-import cmath
-from complex_vector3d import ComplexVector3D  # My complex vector class.
+import cmath 
+from complex_vector3d import ComplexVector3D  #My complex vector class.
 
 
 K_MAGNITUDE = float(cmath.pi)  # |k| for k = pi*(0,0,1).
+TOLERANCE = 1.0e-7  # Tolerance for "zero" checks (roundoff-level).
 
 
 def hansen_m(_x, _y, z):
@@ -101,13 +86,17 @@ def curl(field_func, x_val, y_val, z_val, step):
 
 
 def is_zero_complex(value):
-    """Return True if a complex number is exactly 0j."""
-    return value == 0j
+    """Return True if a complex number is close to 0 within TOLERANCE."""
+    return abs(value) < TOLERANCE
 
 
 def is_zero_vector(vec):
-    """Return True if a ComplexVector3D is exactly the zero vector."""
-    return vec.x == 0j and vec.y == 0j and vec.z == 0j
+    """Return True if all components of a ComplexVector3D are close to 0."""
+    return (
+        abs(vec.x) < TOLERANCE
+        and abs(vec.y) < TOLERANCE
+        and abs(vec.z) < TOLERANCE
+    )
 
 
 def main():
