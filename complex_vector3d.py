@@ -10,7 +10,7 @@ Also redfines magnitude to work for complex vectors
 """
 
 import math
-from Vector3D import Vector3D
+from vector3d import Vector3D
 
 
 class ComplexVector3D(Vector3D):
