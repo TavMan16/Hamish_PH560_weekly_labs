@@ -1,7 +1,7 @@
 """
-vector3d.py
+Vector3D.py
 
-Minimal 3D Cartesian vector class for PH510 Assignment 2.
+3D Cartesian vector class for PH510 Assignment 2.
 
 Implements:
 - Initialisation
@@ -48,7 +48,7 @@ class Vector3D:
         )
 
     def dot(self, other):
-        """Return dot (scalar) product of two vectors."""
+        """Return dot product of two vectors."""
         return self.x * other.x + self.y * other.y + self.z * other.z
 
     def cross(self, other):
