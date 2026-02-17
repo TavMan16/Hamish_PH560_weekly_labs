@@ -1,6 +1,10 @@
 """
 ComplexVector3D.py
 
+Written for Python 3.12.3
+
+Pylint score: 10
+
 Subclass of Vector3D that supports complex-valued vector components.
 
 Implements the complex dot product:
