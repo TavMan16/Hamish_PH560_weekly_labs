@@ -13,7 +13,7 @@ def get_task3_sites(grid_size):
     return {
         "centre": (grid_size // 2, grid_size // 2),
         "corner": (2, 2),
-        "face": (2, grid_size // 2),
+        "face": (grid_size // 2, 2),
     }
 
 
@@ -38,7 +38,16 @@ def save_result(result):
     print(f"Saved green_boundary_std_{file_stub}x.npy")
 
 
-def run_case(case_name, start_row, start_column, grid_size, grid_spacing, total_walkers, seed, comm):
+def run_case(
+    case_name,
+    start_row,
+    start_column,
+    grid_size,
+    grid_spacing,
+    total_walkers,
+    seed,
+    comm,
+):
     """Run one Task 3 case and save arrays on rank 0."""
 
     start_time = MPI.Wtime()
