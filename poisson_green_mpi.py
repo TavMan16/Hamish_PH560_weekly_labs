@@ -5,7 +5,7 @@ from mpi4py import MPI
 
 
 def is_boundary_site(row_index, column_index, grid_size):
-    """Return True if the site lies on the outer boundary of the grid."""
+    """Return True if the site lies on the outer boundary."""
 
     return (
         row_index == 0
@@ -16,7 +16,7 @@ def is_boundary_site(row_index, column_index, grid_size):
 
 
 def split_walker_count(total_walkers, rank, size):
-    """Split the total number of walkers as evenly as possible across ranks."""
+    """Split the walkers as evenly as possible across ranks."""
 
     base_count = total_walkers // size
     remainder = total_walkers % size
@@ -28,17 +28,17 @@ def split_walker_count(total_walkers, rank, size):
 
 
 def take_random_step(row_index, column_index, rng):
-    """Move one lattice step in a uniformly random nearest-neighbour direction."""
+    """Take one uniformly random nearest-neighbour step."""
 
-    step_direction = rng.integers(4)
+    direction = rng.integers(4)
 
-    if step_direction == 0:
+    if direction == 0:
         return row_index + 1, column_index
 
-    if step_direction == 1:
+    if direction == 1:
         return row_index - 1, column_index
 
-    if step_direction == 2:
+    if direction == 2:
         return row_index, column_index + 1
 
     return row_index, column_index - 1
@@ -46,13 +46,12 @@ def take_random_step(row_index, column_index, rng):
 
 def run_single_walk(start_row, start_column, grid_size, rng):
     """
-    Run one random walk until it first hits the boundary.
+    Run one walker until it first reaches the boundary.
 
-    The visit counter includes the starting site.
+    The starting site is counted as one visit.
     """
 
-    visit_counts = np.zeros((grid_size, grid_size), dtype=np.int64)
-    exit_counts = np.zeros((grid_size, grid_size), dtype=np.int64)
+    visit_counts = np.zeros((grid_size, grid_size), dtype=np.int32)
 
     row_index = start_row
     column_index = start_column
@@ -63,32 +62,12 @@ def run_single_walk(start_row, start_column, grid_size, rng):
         row_index, column_index = take_random_step(row_index, column_index, rng)
 
         if is_boundary_site(row_index, column_index, grid_size):
-            exit_counts[row_index, column_index] = 1
-            break
+            return visit_counts, row_index, column_index
 
         visit_counts[row_index, column_index] += 1
 
-    return visit_counts, exit_counts
 
-
-def combine_mean_and_m2(count_a, mean_a, m2_a, count_b, mean_b, m2_b):
-    """Combine two mean/M2 accumulators using the Chan formula."""
-
-    if count_a == 0:
-        return count_b, mean_b, m2_b
-
-    if count_b == 0:
-        return count_a, mean_a, m2_a
-
-    delta = mean_b - mean_a
-    total_count = count_a + count_b
-    combined_mean = mean_a + delta * (count_b / total_count)
-    combined_m2 = m2_a + m2_b + (delta * delta) * count_a * count_b / total_count
-
-    return total_count, combined_mean, combined_m2
-
-
-def accumulate_local_statistics(
+def accumulate_local_sums(
     start_row,
     start_column,
     grid_size,
@@ -97,116 +76,47 @@ def accumulate_local_statistics(
     seed,
     rank,
 ):
-    """Run the local walkers and accumulate mean/M2 fields for both Green's functions."""
+    """Accumulate local sums and sums of squares for the Green's functions."""
 
     rng = np.random.default_rng(seed + rank)
-
-    charge_mean = np.zeros((grid_size, grid_size), dtype=np.float64)
-    charge_m2 = np.zeros((grid_size, grid_size), dtype=np.float64)
-
-    boundary_mean = np.zeros((grid_size, grid_size), dtype=np.float64)
-    boundary_m2 = np.zeros((grid_size, grid_size), dtype=np.float64)
-
-    charge_count = 0
-    boundary_count = 0
-
     spacing_squared = grid_spacing * grid_spacing
 
+    charge_sum = np.zeros((grid_size, grid_size), dtype=np.float64)
+    charge_sumsq = np.zeros((grid_size, grid_size), dtype=np.float64)
+
+    boundary_sum = np.zeros((grid_size, grid_size), dtype=np.float64)
+    boundary_sumsq = np.zeros((grid_size, grid_size), dtype=np.float64)
+
     for _ in range(local_walkers):
-        visit_counts, exit_counts = run_single_walk(
+        visit_counts, exit_row, exit_column = run_single_walk(
             start_row,
             start_column,
             grid_size,
             rng,
         )
 
-        # These are the per-walker contributions whose averages define the Green's functions.
+        # The charge Green's function is proportional to the visit count field.
         charge_sample = spacing_squared * visit_counts.astype(np.float64)
-        boundary_sample = exit_counts.astype(np.float64)
+        charge_sum += charge_sample
+        charge_sumsq += charge_sample * charge_sample
 
-        charge_count, charge_mean, charge_m2 = combine_mean_and_m2(
-            charge_count,
-            charge_mean,
-            charge_m2,
-            1,
-            charge_sample,
-            np.zeros_like(charge_sample),
-        )
+        # The boundary Green's function is an exit-location indicator field.
+        boundary_sum[exit_row, exit_column] += 1.0
+        boundary_sumsq[exit_row, exit_column] += 1.0
 
-        boundary_count, boundary_mean, boundary_m2 = combine_mean_and_m2(
-            boundary_count,
-            boundary_mean,
-            boundary_m2,
-            1,
-            boundary_sample,
-            np.zeros_like(boundary_sample),
-        )
-
-    return {
-        "charge_count": charge_count,
-        "charge_mean": charge_mean,
-        "charge_m2": charge_m2,
-        "boundary_count": boundary_count,
-        "boundary_mean": boundary_mean,
-        "boundary_m2": boundary_m2,
-    }
+    return charge_sum, charge_sumsq, boundary_sum, boundary_sumsq
 
 
-def reduce_statistics(local_statistics, comm):
-    """Reduce local mean/M2 data onto rank 0."""
-
-    gathered_statistics = comm.gather(local_statistics, root=0)
-
-    if comm.rank != 0:
-        return None
-
-    first_item = gathered_statistics[0]
-    grid_shape = first_item["charge_mean"].shape
-
-    charge_count = 0
-    charge_mean = np.zeros(grid_shape, dtype=np.float64)
-    charge_m2 = np.zeros(grid_shape, dtype=np.float64)
-
-    boundary_count = 0
-    boundary_mean = np.zeros(grid_shape, dtype=np.float64)
-    boundary_m2 = np.zeros(grid_shape, dtype=np.float64)
-
-    for item in gathered_statistics:
-        charge_count, charge_mean, charge_m2 = combine_mean_and_m2(
-            charge_count,
-            charge_mean,
-            charge_m2,
-            item["charge_count"],
-            item["charge_mean"],
-            item["charge_m2"],
-        )
-
-        boundary_count, boundary_mean, boundary_m2 = combine_mean_and_m2(
-            boundary_count,
-            boundary_mean,
-            boundary_m2,
-            item["boundary_count"],
-            item["boundary_mean"],
-            item["boundary_m2"],
-        )
-
-    return {
-        "charge_count": charge_count,
-        "charge_mean": charge_mean,
-        "charge_m2": charge_m2,
-        "boundary_count": boundary_count,
-        "boundary_mean": boundary_mean,
-        "boundary_m2": boundary_m2,
-    }
-
-
-def finalise_standard_deviation(sample_count, m2_array):
-    """Return the sample standard deviation field."""
+def compute_sample_std(sum_array, sumsq_array, sample_count):
+    """Return the sample standard deviation field from sums and sums of squares."""
 
     if sample_count < 2:
-        return np.zeros_like(m2_array)
+        return np.zeros_like(sum_array)
 
-    return np.sqrt(m2_array / (sample_count - 1))
+    variance = (sumsq_array - (sum_array * sum_array) / sample_count) / (sample_count - 1)
+    variance = np.maximum(variance, 0.0)
+
+    return np.sqrt(variance)
 
 
 def compute_green_function(
@@ -219,47 +129,70 @@ def compute_green_function(
     comm=MPI.COMM_WORLD,
 ):
     """
-    Estimate the Poisson Green's function from one start site using MPI-parallel random walks.
+    Estimate the Poisson Green's function from one start site using MPI random walks.
 
-    Rank 0 returns the final result dictionary. Other ranks return None.
+    Rank 0 returns the result dictionary. Other ranks return None.
     """
 
     if is_boundary_site(start_row, start_column, grid_size):
-        raise ValueError("The walker start site must lie inside the grid, not on the boundary.")
+        raise ValueError("The walker start site must be inside the grid.")
 
     local_walkers = split_walker_count(total_walkers, comm.rank, comm.size)
 
-    local_statistics = accumulate_local_statistics(
-        start_row,
-        start_column,
-        grid_size,
-        local_walkers,
-        grid_spacing,
-        seed,
-        comm.rank,
+    local_charge_sum, local_charge_sumsq, local_boundary_sum, local_boundary_sumsq = (
+        accumulate_local_sums(
+            start_row,
+            start_column,
+            grid_size,
+            local_walkers,
+            grid_spacing,
+            seed,
+            comm.rank,
+        )
     )
 
-    global_statistics = reduce_statistics(local_statistics, comm)
+    if comm.rank == 0:
+        global_charge_sum = np.zeros_like(local_charge_sum)
+        global_charge_sumsq = np.zeros_like(local_charge_sumsq)
+        global_boundary_sum = np.zeros_like(local_boundary_sum)
+        global_boundary_sumsq = np.zeros_like(local_boundary_sumsq)
+    else:
+        global_charge_sum = None
+        global_charge_sumsq = None
+        global_boundary_sum = None
+        global_boundary_sumsq = None
+
+    # Collective reductions avoid serial rank-0 recombination of Python objects.
+    comm.Reduce(local_charge_sum, global_charge_sum, op=MPI.SUM, root=0)
+    comm.Reduce(local_charge_sumsq, global_charge_sumsq, op=MPI.SUM, root=0)
+    comm.Reduce(local_boundary_sum, global_boundary_sum, op=MPI.SUM, root=0)
+    comm.Reduce(local_boundary_sumsq, global_boundary_sumsq, op=MPI.SUM, root=0)
+
+    total_samples = comm.reduce(local_walkers, op=MPI.SUM, root=0)
 
     if comm.rank != 0:
         return None
 
-    charge_std = finalise_standard_deviation(
-        global_statistics["charge_count"],
-        global_statistics["charge_m2"],
-    )
+    charge_mean = global_charge_sum / total_samples
+    boundary_mean = global_boundary_sum / total_samples
 
-    boundary_std = finalise_standard_deviation(
-        global_statistics["boundary_count"],
-        global_statistics["boundary_m2"],
+    charge_std = compute_sample_std(
+        global_charge_sum,
+        global_charge_sumsq,
+        total_samples,
+    )
+    boundary_std = compute_sample_std(
+        global_boundary_sum,
+        global_boundary_sumsq,
+        total_samples,
     )
 
     return {
-        "charge_green": global_statistics["charge_mean"],
+        "charge_green": charge_mean,
         "charge_std": charge_std,
-        "boundary_green": global_statistics["boundary_mean"],
+        "boundary_green": boundary_mean,
         "boundary_std": boundary_std,
-        "total_walkers": global_statistics["charge_count"],
+        "total_walkers": total_samples,
         "grid_size": grid_size,
         "grid_spacing": grid_spacing,
         "start_row": start_row,
