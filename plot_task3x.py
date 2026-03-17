@@ -13,7 +13,7 @@ def get_task3_sites(grid_size):
     return {
         "centre": (grid_size // 2, grid_size // 2),
         "corner": (2, 2),
-        "face": (2, grid_size // 2),
+        "face": (grid_size // 2, 2),
     }
 
 
@@ -95,37 +95,26 @@ def save_2d_field(array, title, colorbar_label, filename, cmap, extent):
 def save_3d_field(array, title, zlabel, filename, cmap, grid_size, grid_spacing):
     """Save a single 3D surface plot using physical axes in metres."""
 
-    x = np.arange(grid_size) * grid_spacing
-    y = np.arange(grid_size) * grid_spacing
-    y_grid, x_grid = np.meshgrid(y, x, indexing="ij")
+    x = np.arange(grid_size, dtype=np.float64) * grid_spacing
+    y = np.arange(grid_size, dtype=np.float64) * grid_spacing
+    x_grid, y_grid = np.meshgrid(x, y, indexing="xy")
 
     figure = plt.figure(figsize=(7, 5.5))
     axis = figure.add_subplot(111, projection="3d")
+    surface = axis.plot_surface(x_grid, y_grid, array, cmap=cmap, linewidth=0.0)
 
-    surface = axis.plot_surface(
-        x_grid,
-        y_grid,
-        array,
-        cmap=cmap,
-        linewidth=0,
-        antialiased=False,
-    )
-
-    figure.colorbar(surface, ax=axis, shrink=0.75, pad=0.1)
     axis.set_title(title)
     axis.set_xlabel("x (m)")
     axis.set_ylabel("y (m)")
     axis.set_zlabel(zlabel)
-
+    figure.colorbar(surface, ax=axis, shrink=0.7, pad=0.12)
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
-    plt.close(figure)
+    plt.close()
 
 
 def plot_charge_heatmap(case_data, grid_size, grid_spacing, total_walkers):
-    """Save the 2D charge Green's function."""
-
-    extent = make_extent(grid_size, grid_spacing)
+    """Save the 2D charge Green's function heatmap."""
 
     save_2d_field(
         case_data["charge_green"],
@@ -138,14 +127,12 @@ def plot_charge_heatmap(case_data, grid_size, grid_spacing, total_walkers):
         "Charge Green's function",
         f"green_charge_heatmap_{case_data['file_stub']}x.png",
         "viridis",
-        extent,
+        make_extent(grid_size, grid_spacing),
     )
 
 
 def plot_charge_std_heatmap(case_data, grid_size, grid_spacing, total_walkers):
-    """Save the 2D charge standard deviation field."""
-
-    extent = make_extent(grid_size, grid_spacing)
+    """Save the 2D charge standard deviation heatmap."""
 
     save_2d_field(
         case_data["charge_std"],
@@ -158,14 +145,12 @@ def plot_charge_std_heatmap(case_data, grid_size, grid_spacing, total_walkers):
         "Charge Green's function standard deviation",
         f"green_charge_std_heatmap_{case_data['file_stub']}x.png",
         "viridis",
-        extent,
+        make_extent(grid_size, grid_spacing),
     )
 
 
 def plot_boundary_heatmap(case_data, grid_size, grid_spacing, total_walkers):
-    """Save the 2D boundary Green's function."""
-
-    extent = make_extent(grid_size, grid_spacing)
+    """Save the 2D boundary Green's function heatmap."""
 
     save_2d_field(
         case_data["boundary_green"],
@@ -178,14 +163,12 @@ def plot_boundary_heatmap(case_data, grid_size, grid_spacing, total_walkers):
         "Boundary Green's function",
         f"green_boundary_heatmap_{case_data['file_stub']}x.png",
         "magma",
-        extent,
+        make_extent(grid_size, grid_spacing),
     )
 
 
 def plot_boundary_std_heatmap(case_data, grid_size, grid_spacing, total_walkers):
-    """Save the 2D boundary standard deviation field."""
-
-    extent = make_extent(grid_size, grid_spacing)
+    """Save the 2D boundary standard deviation heatmap."""
 
     save_2d_field(
         case_data["boundary_std"],
@@ -198,12 +181,12 @@ def plot_boundary_std_heatmap(case_data, grid_size, grid_spacing, total_walkers)
         "Boundary Green's function standard deviation",
         f"green_boundary_std_heatmap_{case_data['file_stub']}x.png",
         "magma",
-        extent,
+        make_extent(grid_size, grid_spacing),
     )
 
 
 def plot_charge_surface(case_data, grid_size, grid_spacing, total_walkers):
-    """Save the 3D charge Green's function."""
+    """Save the 3D charge Green's function surface."""
 
     save_3d_field(
         case_data["charge_green"],
@@ -241,7 +224,7 @@ def plot_charge_std_surface(case_data, grid_size, grid_spacing, total_walkers):
 
 
 def plot_boundary_surface(case_data, grid_size, grid_spacing, total_walkers):
-    """Save the 3D boundary Green's function."""
+    """Save the 3D boundary Green's function surface."""
 
     save_3d_field(
         case_data["boundary_green"],
@@ -380,21 +363,19 @@ def plot_comparison(
     figure.suptitle(title)
     figure.savefig(filename, dpi=300)
     plt.close(figure)
+    print(f"Saved {filename}")
 
 
 def build_error_summary(case_data, total_walkers):
-    """Return numerical summaries including standard deviation and standard error."""
+    """Return scalar error summary values for one case."""
 
-    charge_std = case_data["charge_std"]
-    boundary_std = case_data["boundary_std"]
+    sqrt_walkers = np.sqrt(float(total_walkers))
+
+    charge_se = case_data["charge_std"] / sqrt_walkers
+    boundary_se = case_data["boundary_std"] / sqrt_walkers
 
     start_row = case_data["start_row"]
     start_column = case_data["start_column"]
-
-    sqrt_n = np.sqrt(total_walkers)
-
-    charge_se = charge_std / sqrt_n
-    boundary_se = boundary_std / sqrt_n
 
     return {
         "case_name": case_data["case_name"],
@@ -404,15 +385,15 @@ def build_error_summary(case_data, total_walkers):
         "y_m": case_data["y_m"],
         "x_cm": case_data["x_cm"],
         "y_cm": case_data["y_cm"],
-        "charge_std_mean": float(np.mean(charge_std)),
-        "charge_std_max": float(np.max(charge_std)),
-        "charge_std_at_start": float(charge_std[start_row, start_column]),
-        "boundary_std_mean": float(np.mean(boundary_std)),
-        "boundary_std_max": float(np.max(boundary_std)),
-        "boundary_std_at_start": float(boundary_std[start_row, start_column]),
+        "charge_std_mean": float(np.mean(case_data["charge_std"])),
+        "charge_std_max": float(np.max(case_data["charge_std"])),
+        "charge_std_at_start": float(case_data["charge_std"][start_row, start_column]),
         "charge_se_mean": float(np.mean(charge_se)),
         "charge_se_max": float(np.max(charge_se)),
         "charge_se_at_start": float(charge_se[start_row, start_column]),
+        "boundary_std_mean": float(np.mean(case_data["boundary_std"])),
+        "boundary_std_max": float(np.max(case_data["boundary_std"])),
+        "boundary_std_at_start": float(case_data["boundary_std"][start_row, start_column]),
         "boundary_se_mean": float(np.mean(boundary_se)),
         "boundary_se_max": float(np.max(boundary_se)),
         "boundary_se_at_start": float(boundary_se[start_row, start_column]),
@@ -420,32 +401,35 @@ def build_error_summary(case_data, total_walkers):
 
 
 def print_error_summary(summary):
-    """Print scalar summaries for the report."""
+    """Print one compact Task 3 error summary."""
 
     print()
-    print(f"Error summary for {summary['case_name']}:")
-    print(f"Source position: ({summary['x_m']:.3f} m, {summary['y_m']:.3f} m)")
-    print(f"Source position: ({summary['x_cm']:.1f} cm, {summary['y_cm']:.1f} cm)")
-    print(f"Charge std mean: {summary['charge_std_mean']:.6e}")
-    print(f"Charge std max: {summary['charge_std_max']:.6e}")
-    print(f"Charge std at start: {summary['charge_std_at_start']:.6e}")
-    print(f"Charge se mean: {summary['charge_se_mean']:.6e}")
-    print(f"Charge se max: {summary['charge_se_max']:.6e}")
-    print(f"Charge se at start: {summary['charge_se_at_start']:.6e}")
-    print(f"Boundary std mean: {summary['boundary_std_mean']:.6e}")
-    print(f"Boundary std max: {summary['boundary_std_max']:.6e}")
-    print(f"Boundary std at start: {summary['boundary_std_at_start']:.6e}")
-    print(f"Boundary se mean: {summary['boundary_se_mean']:.6e}")
-    print(f"Boundary se max: {summary['boundary_se_max']:.6e}")
-    print(f"Boundary se at start: {summary['boundary_se_at_start']:.6e}")
+    print("=" * 80)
+    print(
+        f"Case: {summary['case_name']} "
+        f"({summary['x_cm']:.1f} cm, {summary['y_cm']:.1f} cm)"
+    )
+    print("=" * 80)
+    print(f"Charge std mean:        {summary['charge_std_mean']:.8e}")
+    print(f"Charge std max:         {summary['charge_std_max']:.8e}")
+    print(f"Charge std at source:   {summary['charge_std_at_start']:.8e}")
+    print(f"Charge se mean:         {summary['charge_se_mean']:.8e}")
+    print(f"Charge se max:          {summary['charge_se_max']:.8e}")
+    print(f"Charge se at source:    {summary['charge_se_at_start']:.8e}")
+    print(f"Boundary std mean:      {summary['boundary_std_mean']:.8e}")
+    print(f"Boundary std max:       {summary['boundary_std_max']:.8e}")
+    print(f"Boundary std at source: {summary['boundary_std_at_start']:.8e}")
+    print(f"Boundary se mean:       {summary['boundary_se_mean']:.8e}")
+    print(f"Boundary se max:        {summary['boundary_se_max']:.8e}")
+    print(f"Boundary se at source:  {summary['boundary_se_at_start']:.8e}")
 
 
 def save_error_spreadsheet(summary_list, grid_size, grid_spacing, total_walkers):
-    """Save one spreadsheet containing Task 3 numerical summaries."""
+    """Save Task 3 scalar error summaries to an Excel workbook."""
 
     workbook = Workbook()
     worksheet = workbook.active
-    worksheet.title = "task3_errors"
+    worksheet.title = "task3_error_summary"
 
     worksheet.append(
         [
@@ -629,11 +613,6 @@ def main():
             args.grid_size,
             args.grid_spacing,
         )
-
-        print(f"Saved task3_charge_comparison_N{args.grid_size}_w{args.walkers}x.png")
-        print(f"Saved task3_charge_std_comparison_N{args.grid_size}_w{args.walkers}x.png")
-        print(f"Saved task3_boundary_comparison_N{args.grid_size}_w{args.walkers}x.png")
-        print(f"Saved task3_boundary_std_comparison_N{args.grid_size}_w{args.walkers}x.png")
 
 
 if __name__ == "__main__":
