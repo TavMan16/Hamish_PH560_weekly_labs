@@ -50,7 +50,6 @@ echo
 echo "============================================================"
 echo "Building Cython extension"
 echo "============================================================"
-python3 setup.py build_ext --inplace
 
 GRID_SIZE=101
 GRID_SPACING=0.01
