@@ -4,8 +4,11 @@
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:30:00
+#SBATCH --partition=teaching
+#SBATCH --account=teaching
 #SBATCH --output=ph510_task4_%j.out
 #SBATCH --error=ph510_task4_%j.err
+#SBATCH --export=ALL
 
 set -euo pipefail
 
@@ -18,36 +21,40 @@ echo "Start time: $(date)"
 echo "Working directory: $(pwd)"
 echo "============================================================"
 
-# Load the modules used on your system.
-# Replace these with the actual Wee Archie module names if needed.
+echo
+echo "============================================================"
+echo "Loading modules"
+echo "============================================================"
 module purge
-module load python
-module load openmpi
+module load openmpi/gcc-14.2.1/4.1.8
 
-# Optional: show what environment was used in the report/log.
 echo
 echo "Loaded modules:"
 module list 2>&1
 
 echo
 echo "Python executable:"
-which python
+which python3
 
 echo
 echo "Python version:"
-python --version
+python3 --version
 
-# Build the Cython extension before running MPI.
+echo
+echo "============================================================"
+echo "Checking Python packages"
+echo "============================================================"
+python3 -c "import Cython, numpy; print('Cython:', Cython.__version__); print('NumPy:', numpy.__version__)"
+
 echo
 echo "============================================================"
 echo "Building Cython extension"
 echo "============================================================"
-python setup.py build_ext --inplace
+python3 setup.py build_ext --inplace
 
-# Choose common parameters here.
 GRID_SIZE=101
 GRID_SPACING=0.01
-WALKERS=1000000
+WALKERS=10000000
 SEED=12345
 
 echo
@@ -59,7 +66,6 @@ echo "GRID_SPACING=${GRID_SPACING}"
 echo "WALKERS=${WALKERS}"
 echo "SEED=${SEED}"
 
-# Measure total job-level wall clock for the MPI Green's-function stage.
 GF_START=$(date +%s)
 
 echo
@@ -67,57 +73,51 @@ echo "============================================================"
 echo "Running MPI Green's-function evaluation"
 echo "============================================================"
 
-# Safest default: generate the full set needed downstream.
-srun --ntasks=${SLURM_NTASKS} python run_task3x.py \
+mpirun -np "${SLURM_NTASKS}" python3 run_task3x.py \
     --case all \
-    --grid-size ${GRID_SIZE} \
-    --grid-spacing ${GRID_SPACING} \
-    --walkers ${WALKERS} \
-    --seed ${SEED}
+    --grid-size "${GRID_SIZE}" \
+    --grid-spacing "${GRID_SPACING}" \
+    --walkers "${WALKERS}" \
+    --seed "${SEED}"
 
 GF_END=$(date +%s)
 GF_WALL=$((GF_END - GF_START))
 
 echo
 echo "============================================================"
-echo "Green's-function wall clock time on 16 cores"
+echo "Green's-function wall clock time on ${SLURM_NTASKS} cores"
 echo "============================================================"
 echo "GF wall clock (seconds): ${GF_WALL}"
-echo "GF wall clock (minutes): $(python - <<'PY'
-gf_wall = int("${GF_WALL}")
-print(f"{gf_wall / 60.0:.3f}")
-PY
-)"
+echo "GF wall clock (minutes): $(awk "BEGIN {printf \"%.3f\", ${GF_WALL}/60.0}")"
 
-# Post-processing is serial and should not use MPI.
 echo
 echo "============================================================"
 echo "Running Task 3 plotting"
 echo "============================================================"
-python plot_task3x.py \
+python3 plot_task3x.py \
     --case all \
-    --grid-size ${GRID_SIZE} \
-    --grid-spacing ${GRID_SPACING} \
-    --walkers ${WALKERS}
+    --grid-size "${GRID_SIZE}" \
+    --grid-spacing "${GRID_SPACING}" \
+    --walkers "${WALKERS}"
 
 echo
 echo "============================================================"
 echo "Running Task 4 reconstruction"
 echo "============================================================"
-python reconstruct_potential.py \
+python3 reconstruct_potential.py \
     --case all \
-    --grid-size ${GRID_SIZE} \
-    --grid-spacing ${GRID_SPACING} \
-    --walkers ${WALKERS}
+    --grid-size "${GRID_SIZE}" \
+    --grid-spacing "${GRID_SPACING}" \
+    --walkers "${WALKERS}"
 
 echo
 echo "============================================================"
 echo "Running Task 4 plotting"
 echo "============================================================"
-python plot_task4x.py \
-    --input task4_summary_N${GRID_SIZE}_w${WALKERS}x.csv \
-    --grid-size ${GRID_SIZE} \
-    --walkers ${WALKERS}
+python3 plot_task4x.py \
+    --input "task4_summary_N${GRID_SIZE}_w${WALKERS}x.csv" \
+    --grid-size "${GRID_SIZE}" \
+    --walkers "${WALKERS}"
 
 echo
 echo "============================================================"
