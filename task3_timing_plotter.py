@@ -1,5 +1,7 @@
 """Plot Task 3 speedup with ideal and fitted Amdahl curves."""
 
+#pylint score:8.8
+
 import numpy as np
 import matplotlib.pyplot as plt
 

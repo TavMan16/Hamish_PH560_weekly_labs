@@ -1,5 +1,7 @@
 """Plot saved Green's function and error data for Task 3 Cython runs."""
 
+#pylint score:8.95
+
 import argparse
 
 import matplotlib.pyplot as plt

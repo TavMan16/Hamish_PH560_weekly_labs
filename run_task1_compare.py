@@ -1,5 +1,7 @@
 """Run deterministic Task 1 comparison cases and save a CSV for Task 5."""
 
+#pylint score:9.36
+
 # import the standard csv module so results can be written to a CSV file
 import csv
 

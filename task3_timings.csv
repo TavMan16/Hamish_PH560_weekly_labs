@@ -1,0 +1,5 @@
+case,grid_size,total_walkers,mpi_processes,parallel_runtime_s
+centre,101,1000000,1,70.336441165000
+centre,101,1000000,2,50.012434373000
+centre,101,1000000,4,27.968074775000
+centre,101,1000000,8,19.662260237000

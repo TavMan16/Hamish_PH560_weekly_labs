@@ -1,5 +1,7 @@
 """MPI driver for timed Cython Task 3 Green's function runs."""
 
+#pylint score:9.14
+
 # Import command-line argument parsing.
 import argparse
 # Import NumPy for saving output arrays and timing tables.

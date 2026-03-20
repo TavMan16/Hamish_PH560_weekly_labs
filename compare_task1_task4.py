@@ -1,5 +1,7 @@
 """Compare deterministic Task 1 results against stochastic Task 4 results."""
 
+#pylint core:8.98
+
 import csv
 from pathlib import Path
 

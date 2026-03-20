@@ -1,5 +1,6 @@
 """Finite-difference Poisson solver using successive over-relaxation (SOR)."""
 
+#pylint score: 9.05
 import numpy as np
 
 

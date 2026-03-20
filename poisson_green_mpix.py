@@ -1,5 +1,7 @@
 """MPI random-walk Green's function solver for the 2-D Poisson equation."""
 
+#pylint score:7.21
+
 import numpy as np
 from mpi4py import MPI
 

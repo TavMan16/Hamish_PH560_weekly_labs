@@ -1,5 +1,7 @@
 """Plot saved Task 4 reconstructed potentials using grouped error-bar figures."""
 
+#pylint score:9.21
+
 import argparse
 import csv
 
