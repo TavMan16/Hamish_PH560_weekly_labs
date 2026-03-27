@@ -1,0 +1,5 @@
+numpy
+matplotlib
+mpi4py
+openpyxl
+cython
