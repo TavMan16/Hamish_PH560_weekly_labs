@@ -5,10 +5,10 @@ import ising_model
 
 
 # Set the lattice size for testing
-length = 4
+LENGTH = 4
 
 # Create a lattice using the model function
-lattice = ising_model.create_lattice(length)
+lattice = ising_model.create_lattice(LENGTH)
 
 # Print the lattice so we can inspect it
 print("Lattice:")
