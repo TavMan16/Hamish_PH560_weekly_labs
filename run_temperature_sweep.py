@@ -29,10 +29,10 @@ TEMPERATURE_MAX = 3.0
 TEMPERATURE_STEP = 0.1
 
 # Define the number of single-spin updates used for thermalisation.
-THERMALISATION_STEPS = 1000
+THERMALISATION_STEPS = 10000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 10000
+MEASUREMENT_STEPS = 100000
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -50,8 +50,11 @@ RANK = COMM.Get_rank()
 # Get the total number of MPI processes.
 SIZE = COMM.Get_size()
 
-# Give each walker a distinct random seed based on rank.
-random.seed(12345 + RANK)
+# Build a run-dependent and rank-dependent seed.
+seed = time.time_ns() ^ (RANK + 1)
+
+# Seed the Python random number generator for this rank.
+random.seed(seed)
 
 # Build the list of temperatures to simulate.
 temperatures = []

@@ -1,4 +1,4 @@
-"""Simple MPI driver script for parallel Ising Metropolis walkers."""
+"""MPI driver script for parallel Ising Metropolis walkers."""
 
 # Import a timer for measuring total runtime.
 import time
@@ -44,8 +44,11 @@ RANK = COMM.Get_rank()
 # Get the total number of MPI processes.
 SIZE = COMM.Get_size()
 
-# Give each walker a distinct random seed based on rank.
-random.seed(12345 + RANK)
+# Build a run-dependent and rank-dependent seed.
+seed = time.time_ns() ^ (RANK + 1)
+
+# Seed the Python random number generator for this rank.
+random.seed(seed)
 
 # Create the initial lattice with random spins for this walker.
 lattice = ising_model.create_lattice(LENGTH)
