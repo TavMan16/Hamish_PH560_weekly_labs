@@ -26,13 +26,13 @@ TEMPERATURE_MIN = 1.0
 TEMPERATURE_MAX = 3.0
 
 # Define the temperature spacing.
-TEMPERATURE_STEP = 0.1
+TEMPERATURE_STEP = 0.01
 
 # Define the number of single-spin updates used for thermalisation.
-THERMALISATION_STEPS = 10000
+THERMALISATION_STEPS = 1000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 100000
+MEASUREMENT_STEPS = 10000
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -64,33 +64,18 @@ temperature = TEMPERATURE_MIN
 
 # Keep adding temperatures until the upper bound is reached.
 while temperature <= TEMPERATURE_MAX + 1.0e-12:
-    # Append the current temperature to the list.
     temperatures.append(round(temperature, 10))
-
-    # Increase the temperature by one step.
     temperature += TEMPERATURE_STEP
 
-# Print a short header only from rank 0.
+# Open output file only on rank 0.
 if RANK == 0:
-    # Report the number of independent walkers being used.
-    print("Running", SIZE, "parallel walkers")
+    # Open a CSV file for writing results.
+    output_file = open("ising_temperature_sweep.csv", "w")
 
-    # Report the lattice size.
-    print("Lattice size:", LENGTH, "x", LENGTH)
+    # Write header to file (CSV format).
+    output_file.write("Temperature,AverageEnergyPerSite,SpecificHeatPerSite\n")
 
-    # Report the thermalisation length.
-    print("Thermalisation steps:", THERMALISATION_STEPS)
-
-    # Report the number of measurement cycles.
-    print("Measurement steps:", MEASUREMENT_STEPS)
-
-    # Report the number of spin updates between measurements.
-    print("Sweep steps:", SWEEP_STEPS)
-
-    # Print a blank line before the tabulated results.
-    print()
-
-    # Print the results table header.
+    # Print header to terminal.
     print("Temperature AverageEnergyPerSite SpecificHeatPerSite")
 
 # Loop over all temperatures in the sweep.
@@ -109,68 +94,56 @@ for temperature in temperatures:
 
     # Repeat the measurement cycle the required number of times.
     for _ in range(MEASUREMENT_STEPS):
-        # Evolve this walker between measurements.
         metropolis_kernel.metropolis_sweep(lattice, temperature, SWEEP_STEPS)
 
-        # Measure the current total energy.
         energy = ising_model.total_energy(lattice)
 
-        # Add the energy to the local sum.
         local_energy_sum += energy
-
-        # Add the squared energy to the local squared-energy sum.
         local_energy_squared_sum += energy * energy
 
-    # Compute the average energy for this walker.
+    # Compute local averages.
     local_average_energy = local_energy_sum / MEASUREMENT_STEPS
-
-    # Compute the average squared energy for this walker.
     local_average_energy_squared = local_energy_squared_sum / MEASUREMENT_STEPS
 
-    # Reduce all walker average energies onto rank 0 by summing them.
+    # Reduce across MPI ranks.
     global_energy_sum = COMM.reduce(local_average_energy, op=MPI.SUM, root=0)
-
-    # Reduce all walker average squared energies onto rank 0 by summing them.
     global_energy_squared_sum = COMM.reduce(
         local_average_energy_squared,
         op=MPI.SUM,
         root=0,
     )
 
-    # Print combined results only from rank 0.
+    # Output results on rank 0.
     if RANK == 0:
-        # Compute the mean energy across all walkers.
         average_energy = global_energy_sum / SIZE
-
-        # Compute the mean squared energy across all walkers.
         average_energy_squared = global_energy_squared_sum / SIZE
 
-        # Compute the total number of sites in the lattice.
         number_of_sites = LENGTH * LENGTH
 
-        # Compute the average energy per site.
         average_energy_per_site = average_energy / number_of_sites
 
-        # Compute the specific heat per site from energy fluctuations.
         specific_heat_per_site = (
             (average_energy_squared - (average_energy * average_energy))
             / (temperature * temperature * number_of_sites)
         )
 
-        # Print one row of results for this temperature.
+        # Write to CSV file.
+        output_file.write(
+            f"{temperature},{average_energy_per_site},{specific_heat_per_site}\n"
+        )
+
+        # Print to terminal.
         print(
             temperature,
             average_energy_per_site,
             specific_heat_per_site,
         )
 
-# Print the total runtime only from rank 0 after the sweep is complete.
+# Close file and print runtime on rank 0.
 if RANK == 0:
-    # Stop the total wall-clock timer for the whole script.
+    output_file.close()
+
     end_time = time.perf_counter()
 
-    # Print a blank line after the results table.
     print()
-
-    # Print the total runtime of the whole script.
     print("Total runtime (s):", end_time - start_time)
