@@ -6,9 +6,6 @@ import time
 # Import Python's random module for walker-specific seeding.
 import random
 
-# Import the square root function for error estimates.
-import math
-
 # Import the lattice creation and energy functions.
 import ising_model
 
@@ -32,10 +29,10 @@ TEMPERATURE_MAX = 3.0
 TEMPERATURE_STEP = 0.1
 
 # Define the number of single-spin updates used for thermalisation.
-THERMALISATION_STEPS = 10000
+THERMALISATION_STEPS = 1000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 100000
+MEASUREMENT_STEPS = 100
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -114,18 +111,17 @@ for temperature in temperatures:
     local_average_energy = local_energy_sum / MEASUREMENT_STEPS
     local_average_energy_squared = local_energy_squared_sum / MEASUREMENT_STEPS
 
-    # Reduce across MPI ranks.
-    global_energy_sum = COMM.reduce(local_average_energy, op=MPI.SUM, root=0)
-    global_energy_squared_sum = COMM.reduce(
+    # Gather walker averages on rank 0.
+    all_average_energies = COMM.gather(local_average_energy, root=0)
+    all_average_energies_squared = COMM.gather(
         local_average_energy_squared,
-        op=MPI.SUM,
         root=0,
     )
 
     # Output results on rank 0.
     if RANK == 0:
-        average_energy = global_energy_sum / SIZE
-        average_energy_squared = global_energy_squared_sum / SIZE
+        average_energy = sum(all_average_energies) / SIZE
+        average_energy_squared = sum(all_average_energies_squared) / SIZE
 
         number_of_sites = LENGTH * LENGTH
 
@@ -136,17 +132,21 @@ for temperature in temperatures:
             / (temperature * temperature * number_of_sites)
         )
 
-        # Compute the total number of walker measurements.
-        total_samples = MEASUREMENT_STEPS * SIZE
+        # Compute the walker-to-walker variance of the mean energy.
+        if SIZE > 1:
+            mean_square = sum(
+                energy_value * energy_value for energy_value in all_average_energies
+            ) / SIZE
 
-        # Compute the variance of the total energy.
-        energy_variance = average_energy_squared - (average_energy * average_energy)
+            walker_variance = (
+                mean_square - (average_energy * average_energy)
+            ) * SIZE / (SIZE - 1)
 
-        # Prevent small negative values from round-off errors.
-        energy_variance = max(energy_variance, 0.0)
+            walker_variance = max(walker_variance, 0.0)
 
-        # Compute the standard error of the total energy.
-        energy_error = math.sqrt(energy_variance / total_samples)
+            energy_error = (walker_variance / SIZE) ** 0.5
+        else:
+            energy_error = 0.0
 
         # Convert the energy error to an error per site.
         energy_error_per_site = energy_error / number_of_sites
