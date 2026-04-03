@@ -32,7 +32,7 @@ TEMPERATURE_STEP = 0.1
 THERMALISATION_STEPS = 1000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 100
+MEASUREMENT_STEPS = 1000
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -70,7 +70,10 @@ while temperature <= TEMPERATURE_MAX + 1.0e-12:
 # Open output file only on rank 0.
 if RANK == 0:
     # Open a CSV file for writing results.
-    output_file = open("ising_temperature_sweep.csv", "w")
+    output_file = open(
+        f"ising_temperature_sweep_np{SIZE}_ms{MEASUREMENT_STEPS}.csv",
+        "w",
+    )
 
     # Write header to file (CSV format).
     output_file.write(
