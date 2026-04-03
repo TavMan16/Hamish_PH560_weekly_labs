@@ -6,6 +6,9 @@ import time
 # Import Python's random module for walker-specific seeding.
 import random
 
+# Import the square root function for error estimates.
+import math
+
 # Import the lattice creation and energy functions.
 import ising_model
 
@@ -26,13 +29,13 @@ TEMPERATURE_MIN = 1.0
 TEMPERATURE_MAX = 3.0
 
 # Define the temperature spacing.
-TEMPERATURE_STEP = 0.01
+TEMPERATURE_STEP = 0.1
 
 # Define the number of single-spin updates used for thermalisation.
-THERMALISATION_STEPS = 1000
+THERMALISATION_STEPS = 10000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 10000
+MEASUREMENT_STEPS = 100000
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -73,10 +76,16 @@ if RANK == 0:
     output_file = open("ising_temperature_sweep.csv", "w")
 
     # Write header to file (CSV format).
-    output_file.write("Temperature,AverageEnergyPerSite,SpecificHeatPerSite\n")
+    output_file.write(
+        "Temperature,AverageEnergyPerSite,EnergyErrorPerSite,"
+        "SpecificHeatPerSite\n"
+    )
 
     # Print header to terminal.
-    print("Temperature AverageEnergyPerSite SpecificHeatPerSite")
+    print(
+        "Temperature AverageEnergyPerSite EnergyErrorPerSite "
+        "SpecificHeatPerSite"
+    )
 
 # Loop over all temperatures in the sweep.
 for temperature in temperatures:
@@ -127,15 +136,32 @@ for temperature in temperatures:
             / (temperature * temperature * number_of_sites)
         )
 
+        # Compute the total number of walker measurements.
+        total_samples = MEASUREMENT_STEPS * SIZE
+
+        # Compute the variance of the total energy.
+        energy_variance = average_energy_squared - (average_energy * average_energy)
+
+        # Prevent small negative values from round-off errors.
+        energy_variance = max(energy_variance, 0.0)
+
+        # Compute the standard error of the total energy.
+        energy_error = math.sqrt(energy_variance / total_samples)
+
+        # Convert the energy error to an error per site.
+        energy_error_per_site = energy_error / number_of_sites
+
         # Write to CSV file.
         output_file.write(
-            f"{temperature},{average_energy_per_site},{specific_heat_per_site}\n"
+            f"{temperature},{average_energy_per_site},{energy_error_per_site},"
+            f"{specific_heat_per_site}\n"
         )
 
         # Print to terminal.
         print(
             temperature,
             average_energy_per_site,
+            energy_error_per_site,
             specific_heat_per_site,
         )
 
