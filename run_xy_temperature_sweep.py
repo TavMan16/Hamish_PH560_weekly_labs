@@ -15,9 +15,11 @@ import xy_metropolis_kernel
 # Import the MPI communicator tools.
 from mpi4py import MPI
 
+# Import os so the lattice size can be supplied externally.
+import os
 
 # Define the lattice size.
-LENGTH = 8
+LENGTH = int(os.environ.get("LENGTH", "64"))
 
 # Define the minimum temperature in units where J = 1.
 TEMPERATURE_MIN = 0.5
@@ -28,8 +30,8 @@ TEMPERATURE_MAX = 1.5
 # Define the temperature spacing.
 TEMPERATURE_STEP = 0.05
 
-# Define the number of single-site updates used for thermalisation.
-THERMALISATION_STEPS = 10000
+# Define the number of whole lattice updates used for thermalisation.
+THERMALISATION_SWEEPS = 200
 
 # Define the number of measurement cycles.
 MEASUREMENT_STEPS = 10000
@@ -107,7 +109,7 @@ for temperature in temperatures:
     xy_metropolis_kernel.metropolis_sweep(
         lattice,
         temperature,
-        THERMALISATION_STEPS,
+        THERMALISATION_SWEEPS * SWEEPSTEPS,
     )
 
     # Start the local energy accumulator at zero.
