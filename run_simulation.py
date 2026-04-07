@@ -23,10 +23,10 @@ LENGTH = 7
 TEMPERATURE = 2.0
 
 # Define the number of single-spin updates used for thermalisation.
-THERMALISATION_STEPS = 10000
+THERMALISATION_STEPS = 1000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 100000
+MEASUREMENT_STEPS = 10000
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH

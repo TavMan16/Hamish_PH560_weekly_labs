@@ -19,22 +19,22 @@ from mpi4py import MPI
 import os
 
 # Define the lattice size.
-LENGTH = int(os.environ.get("LENGTH", "64"))
+LENGTH = int(os.environ.get("LENGTH", "4"))
 
 # Define the minimum temperature in units where J = 1.
 TEMPERATURE_MIN = 0.5
 
 # Define the maximum temperature in units where J = 1.
-TEMPERATURE_MAX = 1.5
+TEMPERATURE_MAX = 3.0
 
 # Define the temperature spacing.
-TEMPERATURE_STEP = 0.05
+TEMPERATURE_STEP = 0.1
 
 # Define the number of whole lattice updates used for thermalisation.
-THERMALISATION_SWEEPS = 200
+THERMALISATION_SWEEPS = 10000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 10000
+MEASUREMENT_STEPS = 100000
 
 # Define the number of single-site updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -82,7 +82,7 @@ if RANK == 0:
 
     # Open a CSV file for writing results.
     output_file = open(
-        f"xy_temperature_sweep_L{LENGTH}_np{SIZE}_ms{MEASUREMENT_STEPS}.csv",
+        f"xy_temperature_sweep_L{LENGTH}_np{SIZE}_ms{MEASUREMENT_STEPS}_ts{THERMALISATION_SWEEPS}.csv",
         "w",
     )
 
@@ -109,7 +109,7 @@ for temperature in temperatures:
     xy_metropolis_kernel.metropolis_sweep(
         lattice,
         temperature,
-        THERMALISATION_SWEEPS * SWEEPSTEPS,
+        THERMALISATION_SWEEPS * SWEEP_STEPS,
     )
 
     # Start the local energy accumulator at zero.

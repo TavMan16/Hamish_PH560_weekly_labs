@@ -3,6 +3,9 @@
 # Import a timer for measuring total runtime.
 import time
 
+#Import da OS
+import os
+
 # Import Python's random module for walker-specific seeding.
 import random
 
@@ -17,10 +20,10 @@ from mpi4py import MPI
 
 
 # Define the lattice size.
-LENGTH = 7
+LENGTH = int(os.environ.get("LENGTH", "4"))
 
 # Define the minimum temperature in units where J = 1.
-TEMPERATURE_MIN = 1.0
+TEMPERATURE_MIN = 0.5
 
 # Define the maximum temperature in units where J = 1.
 TEMPERATURE_MAX = 3.0
@@ -28,11 +31,11 @@ TEMPERATURE_MAX = 3.0
 # Define the temperature spacing.
 TEMPERATURE_STEP = 0.1
 
-# Define the number of single-spin updates used for thermalisation.
-THERMALISATION_STEPS = 1000
+# Define the number of whole-lattice updates used for thermalisation.
+THERMALISATION_SWEEPS = 10000
 
 # Define the number of measurement cycles.
-MEASUREMENT_STEPS = 1000
+MEASUREMENT_STEPS = 100000
 
 # Define the number of single-spin updates between measurements.
 SWEEP_STEPS = LENGTH * LENGTH
@@ -71,7 +74,7 @@ while temperature <= TEMPERATURE_MAX + 1.0e-12:
 if RANK == 0:
     # Open a CSV file for writing results.
     output_file = open(
-        f"ising_temperature_sweep_np{SIZE}_ms{MEASUREMENT_STEPS}.csv",
+        f"ising_temperature_sweep_L{LENGTH}_np{SIZE}_ms{MEASUREMENT_STEPS}_ts{THERMALISATION_SWEEPS}.csv",
         "w",
     )
 
@@ -93,7 +96,11 @@ for temperature in temperatures:
     lattice = ising_model.create_lattice(LENGTH)
 
     # Run the thermalisation period for this walker.
-    metropolis_kernel.metropolis_sweep(lattice, temperature, THERMALISATION_STEPS)
+    metropolis_kernel.metropolis_sweep(
+    lattice,
+    temperature,
+    THERMALISATION_SWEEPS * SWEEP_STEPS,
+)
 
     # Start the local energy accumulator at zero.
     local_energy_sum = 0.0
