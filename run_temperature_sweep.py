@@ -1,26 +1,21 @@
 """Task 3: MPI temperature sweep for the 2D Ising model."""
 
-# Import a timer for measuring total runtime.
+# Pylint cannot fully inspect symbols provided by mpi4py or compiled
+# Cython extension modules, so these warnings are disabled here.
+# pylint: disable=no-name-in-module,c-extension-no-member
+
+import os
+import random
 import time
 
-#Import da OS
-import os
-
-# Import Python's random module for walker-specific seeding.
-import random
-
-# Import the lattice creation and energy functions.
-import ising_model
-
-# Import the compiled Cython Metropolis kernel.
-import metropolis_kernel
-
-# Import the MPI communicator tools.
 from mpi4py import MPI
+
+import ising_model
+import metropolis_kernel
 
 
 # Define the lattice size.
-LENGTH = int(os.environ.get("LENGTH", "4"))
+LENGTH = int(os.environ.get("LENGTH", "8"))
 
 # Define the minimum temperature in units where J = 1.
 TEMPERATURE_MIN = 0.5
@@ -41,145 +36,197 @@ MEASUREMENT_STEPS = 100000
 SWEEP_STEPS = LENGTH * LENGTH
 
 
-# Start the total wall-clock timer for the whole script.
-start_time = time.perf_counter()
+def build_temperature_list():
+    """Return the list of temperatures included in the sweep."""
+    temperatures = []
+    temperature = TEMPERATURE_MIN
 
-# Create the global communicator containing all MPI processes.
-COMM = MPI.COMM_WORLD
+    while temperature <= TEMPERATURE_MAX + 1.0e-12:
+        temperatures.append(round(temperature, 10))
+        temperature += TEMPERATURE_STEP
 
-# Get the rank of this process.
-RANK = COMM.Get_rank()
+    return temperatures
 
-# Get the total number of MPI processes.
-SIZE = COMM.Get_size()
+# pylint: disable=too-many-locals,too-many-statements
 
-# Build a run-dependent and rank-dependent seed.
-seed = time.time_ns() ^ (RANK + 1)
+def main():
+    """Run the MPI temperature sweep and save averaged observables."""
+    # Start the total wall-clock timer for the whole script.
+    start_time = time.perf_counter()
 
-# Seed the Python random number generator for this rank.
-random.seed(seed)
+    # Create the global communicator containing all MPI processes.
+    comm = MPI.COMM_WORLD
 
-# Build the list of temperatures to simulate.
-temperatures = []
+    # Get the rank of this process.
+    rank = comm.Get_rank()
 
-# Start from the minimum temperature.
-temperature = TEMPERATURE_MIN
+    # Get the total number of MPI processes.
+    size = comm.Get_size()
 
-# Keep adding temperatures until the upper bound is reached.
-while temperature <= TEMPERATURE_MAX + 1.0e-12:
-    temperatures.append(round(temperature, 10))
-    temperature += TEMPERATURE_STEP
+    # Build a run-dependent and rank-dependent seed.
+    seed = time.time_ns() ^ (rank + 1)
 
-# Open output file only on rank 0.
-if RANK == 0:
-    # Open a CSV file for writing results.
-    output_file = open(
-        f"ising_temperature_sweep_L{LENGTH}_np{SIZE}_ms{MEASUREMENT_STEPS}_ts{THERMALISATION_SWEEPS}.csv",
-        "w",
+    # Seed the Python random number generator for this rank.
+    random.seed(seed)
+
+    # Build the list of temperatures to simulate.
+    temperatures = build_temperature_list()
+
+    # Build the CSV output filename.
+    output_filename = (
+        f"ising_temperature_sweep_L{LENGTH}_np{size}"
+        f"_ms{MEASUREMENT_STEPS}_ts{THERMALISATION_SWEEPS}.csv"
     )
 
-    # Write header to file (CSV format).
-    output_file.write(
-        "Temperature,AverageEnergyPerSite,EnergyErrorPerSite,"
-        "SpecificHeatPerSite\n"
-    )
+    # Open output file only on rank 0.
+    if rank == 0:
+        with open(output_filename, "w", encoding="utf-8") as output_file:
+            # Write header to file (CSV format).
+            output_file.write(
+                "Temperature,AverageEnergyPerSite,EnergyErrorPerSite,"
+                "SpecificHeatPerSite\n"
+            )
 
-    # Print header to terminal.
-    print(
-        "Temperature AverageEnergyPerSite EnergyErrorPerSite "
-        "SpecificHeatPerSite"
-    )
+            # Print header to terminal.
+            print(
+                "Temperature AverageEnergyPerSite EnergyErrorPerSite "
+                "SpecificHeatPerSite"
+            )
 
-# Loop over all temperatures in the sweep.
-for temperature in temperatures:
-    # Create a fresh random lattice for this walker at this temperature.
-    lattice = ising_model.create_lattice(LENGTH)
+            # Loop over all temperatures in the sweep.
+            for temperature in temperatures:
+                # Create a fresh random lattice for this walker at this temperature.
+                lattice = ising_model.create_lattice(LENGTH)
 
-    # Run the thermalisation period for this walker.
-    metropolis_kernel.metropolis_sweep(
-    lattice,
-    temperature,
-    THERMALISATION_SWEEPS * SWEEP_STEPS,
-)
+                # Run the thermalisation period for this walker.
+                metropolis_kernel.metropolis_sweep(
+                    lattice,
+                    temperature,
+                    THERMALISATION_SWEEPS * SWEEP_STEPS,
+                )
 
-    # Start the local energy accumulator at zero.
-    local_energy_sum = 0.0
+                # Start the local energy accumulator at zero.
+                local_energy_sum = 0.0
 
-    # Start the local squared-energy accumulator at zero.
-    local_energy_squared_sum = 0.0
+                # Start the local squared-energy accumulator at zero.
+                local_energy_squared_sum = 0.0
 
-    # Repeat the measurement cycle the required number of times.
-    for _ in range(MEASUREMENT_STEPS):
-        metropolis_kernel.metropolis_sweep(lattice, temperature, SWEEP_STEPS)
+                # Repeat the measurement cycle the required number of times.
+                for _ in range(MEASUREMENT_STEPS):
+                    metropolis_kernel.metropolis_sweep(
+                        lattice,
+                        temperature,
+                        SWEEP_STEPS,
+                    )
 
-        energy = ising_model.total_energy(lattice)
+                    energy = ising_model.total_energy(lattice)
+                    local_energy_sum += energy
+                    local_energy_squared_sum += energy * energy
 
-        local_energy_sum += energy
-        local_energy_squared_sum += energy * energy
+                # Compute local averages.
+                local_average_energy = local_energy_sum / MEASUREMENT_STEPS
+                local_average_energy_squared = (
+                    local_energy_squared_sum / MEASUREMENT_STEPS
+                )
 
-    # Compute local averages.
-    local_average_energy = local_energy_sum / MEASUREMENT_STEPS
-    local_average_energy_squared = local_energy_squared_sum / MEASUREMENT_STEPS
+                # Gather walker averages on rank 0.
+                all_average_energies = comm.gather(
+                    local_average_energy,
+                    root=0,
+                )
+                all_average_energies_squared = comm.gather(
+                    local_average_energy_squared,
+                    root=0,
+                )
 
-    # Gather walker averages on rank 0.
-    all_average_energies = COMM.gather(local_average_energy, root=0)
-    all_average_energies_squared = COMM.gather(
-        local_average_energy_squared,
-        root=0,
-    )
+                average_energy = sum(all_average_energies) / size
+                average_energy_squared = (
+                    sum(all_average_energies_squared) / size
+                )
 
-    # Output results on rank 0.
-    if RANK == 0:
-        average_energy = sum(all_average_energies) / SIZE
-        average_energy_squared = sum(all_average_energies_squared) / SIZE
+                number_of_sites = LENGTH * LENGTH
+                average_energy_per_site = average_energy / number_of_sites
 
-        number_of_sites = LENGTH * LENGTH
+                specific_heat_per_site = (
+                    (average_energy_squared - (average_energy * average_energy))
+                    / (temperature * temperature * number_of_sites)
+                )
 
-        average_energy_per_site = average_energy / number_of_sites
+                # Compute the walker-to-walker variance of the mean energy.
+                if size > 1:
+                    mean_square = (
+                        sum(
+                            energy_value * energy_value
+                            for energy_value in all_average_energies
+                        )
+                        / size
+                    )
 
-        specific_heat_per_site = (
-            (average_energy_squared - (average_energy * average_energy))
-            / (temperature * temperature * number_of_sites)
-        )
+                    walker_variance = (
+                        mean_square - (average_energy * average_energy)
+                    ) * size / (size - 1)
 
-        # Compute the walker-to-walker variance of the mean energy.
-        if SIZE > 1:
-            mean_square = sum(
-                energy_value * energy_value for energy_value in all_average_energies
-            ) / SIZE
+                    walker_variance = max(walker_variance, 0.0)
+                    local_energy_error = (walker_variance / size) ** 0.5
+                else:
+                    local_energy_error = 0.0
 
-            walker_variance = (
-                mean_square - (average_energy * average_energy)
-            ) * SIZE / (SIZE - 1)
+                # Convert the energy error to an error per site.
+                energy_error_per_site = local_energy_error / number_of_sites
 
-            walker_variance = max(walker_variance, 0.0)
+                # Write to CSV file.
+                output_file.write(
+                    f"{temperature},{average_energy_per_site},"
+                    f"{energy_error_per_site},{specific_heat_per_site}\n"
+                )
 
-            energy_error = (walker_variance / SIZE) ** 0.5
-        else:
-            energy_error = 0.0
+                # Print to terminal.
+                print(
+                    temperature,
+                    average_energy_per_site,
+                    energy_error_per_site,
+                    specific_heat_per_site,
+                )
 
-        # Convert the energy error to an error per site.
-        energy_error_per_site = energy_error / number_of_sites
+            # Stop the total wall-clock timer for the whole script.
+            end_time = time.perf_counter()
 
-        # Write to CSV file.
-        output_file.write(
-            f"{temperature},{average_energy_per_site},{energy_error_per_site},"
-            f"{specific_heat_per_site}\n"
-        )
+            print()
+            print("Total runtime (s):", end_time - start_time)
 
-        # Print to terminal.
-        print(
-            temperature,
-            average_energy_per_site,
-            energy_error_per_site,
-            specific_heat_per_site,
-        )
+    else:
+        # Non-root ranks still participate in the sweep and gathers.
+        for temperature in temperatures:
+            lattice = ising_model.create_lattice(LENGTH)
 
-# Close file and print runtime on rank 0.
-if RANK == 0:
-    output_file.close()
+            metropolis_kernel.metropolis_sweep(
+                lattice,
+                temperature,
+                THERMALISATION_SWEEPS * SWEEP_STEPS,
+            )
 
-    end_time = time.perf_counter()
+            local_energy_sum = 0.0
+            local_energy_squared_sum = 0.0
 
-    print()
-    print("Total runtime (s):", end_time - start_time)
+            for _ in range(MEASUREMENT_STEPS):
+                metropolis_kernel.metropolis_sweep(
+                    lattice,
+                    temperature,
+                    SWEEP_STEPS,
+                )
+
+                energy = ising_model.total_energy(lattice)
+                local_energy_sum += energy
+                local_energy_squared_sum += energy * energy
+
+            local_average_energy = local_energy_sum / MEASUREMENT_STEPS
+            local_average_energy_squared = (
+                local_energy_squared_sum / MEASUREMENT_STEPS
+            )
+
+            comm.gather(local_average_energy, root=0)
+            comm.gather(local_average_energy_squared, root=0)
+
+
+if __name__ == "__main__":
+    main()
