@@ -1,19 +1,16 @@
 """MPI driver script for parallel Ising Metropolis walkers."""
 
-# Import a timer for measuring total runtime.
+# Pylint cannot fully inspect symbols provided by mpi4py or compiled
+# Cython extension modules, so these warnings are disabled here.
+# pylint: disable=no-name-in-module,c-extension-no-member
+
+import random
 import time
 
-# Import Python's random module for walker-specific seeding.
-import random
-
-# Import the lattice creation and energy functions.
-import ising_model
-
-# Import the compiled Cython Metropolis kernel.
-import metropolis_kernel
-
-# Import the MPI communicator tools.
 from mpi4py import MPI
+
+import ising_model
+import metropolis_kernel
 
 
 # Define the lattice size.
@@ -32,87 +29,95 @@ MEASUREMENT_STEPS = 10000
 SWEEP_STEPS = LENGTH * LENGTH
 
 
-# Start the total wall-clock timer for the whole script.
-start_time = time.perf_counter()
+def main():
+    """Run the MPI Ising simulation and report averaged energy results."""
+    # Start the total wall-clock timer for the whole script.
+    start_time = time.perf_counter()
 
-# Create the global communicator containing all MPI processes.
-COMM = MPI.COMM_WORLD
+    # Create the global communicator containing all MPI processes.
+    comm = MPI.COMM_WORLD
 
-# Get the rank of this process.
-RANK = COMM.Get_rank()
+    # Get the rank of this process.
+    rank = comm.Get_rank()
 
-# Get the total number of MPI processes.
-SIZE = COMM.Get_size()
+    # Get the total number of MPI processes.
+    size = comm.Get_size()
 
-# Build a run-dependent and rank-dependent seed.
-seed = time.time_ns() ^ (RANK + 1)
+    # Build a run-dependent and rank-dependent seed.
+    seed = time.time_ns() ^ (rank + 1)
 
-# Seed the Python random number generator for this rank.
-random.seed(seed)
+    # Seed the Python random number generator for this rank.
+    random.seed(seed)
 
-# Create the initial lattice with random spins for this walker.
-lattice = ising_model.create_lattice(LENGTH)
+    # Create the initial lattice with random spins for this walker.
+    lattice = ising_model.create_lattice(LENGTH)
 
-# Print a short header only from rank 0.
-if RANK == 0:
-    # Report the number of independent walkers being used.
-    print("Running", SIZE, "parallel walkers")
+    # Print a short header only from rank 0.
+    if rank == 0:
+        # Report the number of independent walkers being used.
+        print("Running", size, "parallel walkers")
 
-    # Report the simulation temperature.
-    print("Temperature:", TEMPERATURE)
+        # Report the simulation temperature.
+        print("Temperature:", TEMPERATURE)
 
-    # Report the lattice size.
-    print("Lattice size:", LENGTH, "x", LENGTH)
+        # Report the lattice size.
+        print("Lattice size:", LENGTH, "x", LENGTH)
 
-    # Print the initial lattice for the rank 0 walker only.
-    print("Initial lattice:")
-    for row in lattice:
-        print(row)
+        # Print the initial lattice for the rank 0 walker only.
+        print("Initial lattice:")
+        for row in lattice:
+            print(row)
 
-    # Print the initial energy for the rank 0 walker only.
-    print("Initial energy:", ising_model.total_energy(lattice))
+        # Print the initial energy for the rank 0 walker only.
+        print("Initial energy:", ising_model.total_energy(lattice))
 
-# Run the thermalisation period for this walker.
-metropolis_kernel.metropolis_sweep(lattice, TEMPERATURE, THERMALISATION_STEPS)
+    # Run the thermalisation period for this walker.
+    metropolis_kernel.metropolis_sweep(
+        lattice, TEMPERATURE, THERMALISATION_STEPS
+    )
 
-# Start the local energy accumulator at zero.
-local_energy_sum = 0.0
+    # Start the local energy accumulator at zero.
+    local_energy_sum = 0.0
 
-# Repeat the measurement cycle the required number of times.
-for _ in range(MEASUREMENT_STEPS):
-    # Evolve this walker between measurements.
-    metropolis_kernel.metropolis_sweep(lattice, TEMPERATURE, SWEEP_STEPS)
+    # Repeat the measurement cycle the required number of times.
+    for _ in range(MEASUREMENT_STEPS):
+        # Evolve this walker between measurements.
+        metropolis_kernel.metropolis_sweep(lattice, TEMPERATURE, SWEEP_STEPS)
 
-    # Measure the current total energy and add it to the local sum.
-    local_energy_sum += ising_model.total_energy(lattice)
+        # Measure the current total energy and add it to the local sum.
+        local_energy_sum += ising_model.total_energy(lattice)
 
-# Compute the average energy for this walker.
-local_average_energy = local_energy_sum / MEASUREMENT_STEPS
+    # Compute the average energy for this walker.
+    local_average_energy = local_energy_sum / MEASUREMENT_STEPS
 
-# Reduce all walker averages onto rank 0 by summing them.
-global_energy_sum = COMM.reduce(local_average_energy, op=MPI.SUM, root=0)
+    # Reduce all walker averages onto rank 0 by summing them.
+    global_energy_sum = comm.reduce(local_average_energy, op=MPI.SUM, root=0)
 
-# Print final combined results only from rank 0.
-if RANK == 0:
-    # Compute the mean energy across all walkers.
-    average_energy = global_energy_sum / SIZE
+    # Print final combined results only from rank 0.
+    if rank == 0:
+        # Compute the mean energy across all walkers.
+        average_energy = global_energy_sum / size
 
-    # Print the final lattice for the rank 0 walker only.
-    print("Final lattice:")
-    for row in lattice:
-        print(row)
+        # Print the final lattice for the rank 0 walker only.
+        print("Final lattice:")
+        for row in lattice:
+            print(row)
 
-    # Print the final energy for the rank 0 walker only.
-    print("Final energy:", ising_model.total_energy(lattice))
+        # Print the final energy for the rank 0 walker only.
+        print("Final energy:", ising_model.total_energy(lattice))
 
-    # Print the combined average energy.
-    print("Average energy:", average_energy)
+        # Print the combined average energy.
+        print("Average energy:", average_energy)
 
-    # Print the combined average energy per site.
-    print("Average energy per site:", average_energy / (LENGTH * LENGTH))
+        # Print the combined average energy per site.
+        print("Average energy per site:", average_energy / (LENGTH * LENGTH))
 
-    # Stop the total wall-clock timer for the whole script.
-    end_time = time.perf_counter()
+        # Stop the total wall-clock timer for the whole script.
+        end_time = time.perf_counter()
 
-    # Print the total runtime of the whole script.
-    print("Total runtime (s):", end_time - start_time)
+        # Print the total runtime of the whole script.
+        print("Total runtime (s):", end_time - start_time)
+
+
+if __name__ == "__main__":
+    main()
